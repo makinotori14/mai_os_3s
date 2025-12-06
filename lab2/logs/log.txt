@@ -1,0 +1,18 @@
+execve("./parallel", ["./parallel"], 0xffffee29faf0 /* 56 vars */) = 0
+write(1, "Введите размер матрицы: ", 44) = 44
+read(0, "4\n", 1024)                    = 2
+write(1, "Введите количество потоков: ", 52) = 52
+read(0, "3\n", 1024)                    = 2
+write(1, "Введите элементы матрицы 4x4:\n", 52) = 52
+read(0, "1 2 3 4\n", 1024)              = 8
+read(0, "4 3 2 1\n", 1024)              = 8
+read(0, "5 6 7 8\n", 1024)              = 8
+read(0, "8 7 6 5\n", 1024)              = 8
+
+clone3({flags=CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD|CLONE_SYSVSEM|CLONE_SETTLS|CLONE_PARENT_SETTID|CLONE_CHILD_CLEARTID}, 88) = 5067
+clone3({flags=CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD|CLONE_SYSVSEM|CLONE_SETTLS|CLONE_PARENT_SETTID|CLONE_CHILD_CLEARTID}, 88) = 5068
+clone3({flags=CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD|CLONE_SYSVSEM|CLONE_SETTLS|CLONE_PARENT_SETTID|CLONE_CHILD_CLEARTID}, 88) = 5069
+
+write(1, "Определитель (parallel) = 0\n", 40) = 40
+exit_group(0)                           = ?
++++ exited with 0 +++
