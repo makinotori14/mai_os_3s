@@ -3,53 +3,16 @@
 #include <random>
 #include <vector>
 #include <iostream>
-#include <algorithm>
-#include <thread>
 #include <iomanip>
 #include "../src/det.hpp"
 
-void task(const std::vector<std::vector<int>> &a, int &ans, const std::vector<size_t> &row) {
-    for (size_t r : row) {
-        ans += sign(r) * a[r][0] * det(minor(a, r, 0));
-    }
-}
-
-int parallel_det(const std::vector<std::vector<int>>& a, size_t k_input) {
-    size_t n = a.size();
-    if (n <= 2) {
-        return det(a);
-    }
-
-    size_t k = std::min(k_input, n);
-    if (k < 1) k = 1;
-
-    std::vector<std::vector<size_t>> rows(k);
-    for (size_t i = 0; i < n; ++i) {
-        rows[i % k].push_back(i);
-    }
-
-    std::vector<int> part_ans(k, 0);
-    std::vector<std::thread> threads;
-    for (size_t i = 0; i < k; ++i) {
-        threads.emplace_back(task, std::ref(a), std::ref(part_ans[i]), std::ref(rows[i]));
-    }
-
-    for (auto& t : threads) {
-        t.join();
-    }
-
-    int total = 0;
-    for (int x : part_ans) total += x;
-    return total;
-}
-
-std::vector<std::vector<int>> generateMatrix(size_t n, int seed = 0) {
+std::vector<std::vector<long double>> generateMatrix(size_t n, int seed = 0) {
     std::mt19937 gen(seed);
-    std::uniform_int_distribution<> dis(-3, 3);
-    std::vector<std::vector<int>> mat(n, std::vector<int>(n));
+    std::uniform_int_distribution<int> dis(-5, 5);
+    std::vector<std::vector<long double>> mat(n, std::vector<long double>(n));
     for (size_t i = 0; i < n; ++i)
         for (size_t j = 0; j < n; ++j)
-            mat[i][j] = dis(gen);
+            mat[i][j] = static_cast<long double>(dis(gen));
     return mat;
 }
 
@@ -66,34 +29,35 @@ void runBenchmarkForN(size_t n, int seed = 42) {
     auto matrix = generateMatrix(n, seed);
 
     auto [serial_res, serial_time] = measure_time([&]() {
-        return det(matrix);
+        return det_single(matrix);
     });
 
-    std::cout << "n = " << n << " serial: " 
-              << serial_time << " ms \ndet = " << serial_res << "\n";
+    std::cout << "n = " << n << " | serial: "
+              << serial_time << " ms | det = " << serial_res << "\n";
 
-    std::vector<size_t> thread_counts = {1, 2, 4, 8};
-    for (size_t k : thread_counts) {
-        if (k > n) continue;
+    std::vector<int> thread_counts = {1, 2, 4, 8};
+    for (int k : thread_counts) {
+        if (static_cast<size_t>(k) > n) continue;
 
         auto [par_res, par_time] = measure_time([&]() {
-            return parallel_det(matrix, k);
+            return det_parallel(matrix, k);
         });
 
-        ASSERT_EQ(par_res, serial_res) << "Result mismatch for n=" << n << ", k=" << k;
+        const long double eps = 1e-9L;
+        if (std::abs(par_res - serial_res) > eps) {
+            FAIL() << "Result mismatch for n=" << n << ", k=" << k;
+        }
 
-        double speedup = static_cast<double>(serial_time) / par_time;
-        std::cout << "k = " << k 
-                  << " -> " << par_time << " ms (speedup: " 
-                  << std::fixed << std::setprecision(5) << speedup << "x)\n";
+        double speedup = (par_time > 0) ? static_cast<double>(serial_time) / par_time : 0.0;
+        std::cout << "  k = " << k
+                  << " → " << par_time << " ms (speedup: "
+                  << std::fixed << std::setprecision(4) << speedup << "x)\n";
     }
     std::cout << "\n";
 }
 
 TEST(DeterminantBenchmark, PerformanceAllSizes) {
-    std::cout << "Benchmark: n = 1...8 (seed = 42)\n";
-    std::cout << "\n";
-
+    std::cout << "Benchmark (n = 1 - 8)\n\n";
     for (size_t n = 1; n <= 8; ++n) {
         runBenchmarkForN(n, 42);
     }

@@ -5,20 +5,26 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 include(FetchContent)
+set(INSTALL_GTEST OFF)
+set(BUILD_GMOCK ON)
 FetchContent_Declare(
     googletest
-    URL https://github.com/google/googletest/archive/refs/tags/v1.14.0.tar.gz
+    GIT_REPOSITORY https://github.com/google/googletest.git
+    GIT_TAG        v1.14.0
 )
 set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(googletest)
 
-add_library(det_lib src/det.cpp)
+add_library(det_lib
+    src/det.cpp
+    src/det_parallel.cpp
+)
 target_include_directories(det_lib PUBLIC src)
 
-add_executable(serial src/serial.cpp)
+add_executable(serial src/main_serial.cpp)
 target_link_libraries(serial det_lib)
 
-add_executable(parallel src/parallel.cpp)
+add_executable(parallel src/main_parallel.cpp)
 target_link_libraries(parallel det_lib pthread)
 
 add_executable(benchmark tests/benchmark.cpp)

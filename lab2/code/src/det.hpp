@@ -1,6 +1,9 @@
 #pragma once
 #include <vector>
 
-int sign(size_t x);
-std::vector<std::vector<int>> minor(const std::vector<std::vector<int>>& a, size_t ei, size_t ej);
-int det(const std::vector<std::vector<int>>& a);
+long double sign(int i);
+std::vector<std::vector<long double>> minor(
+    const std::vector<std::vector<long double>>& a, int skip_row, int skip_col
+);
+long double det_single(const std::vector<std::vector<long double>>& a);
+long double det_parallel(const std::vector<std::vector<long double>>& matrix, int num_threads);
