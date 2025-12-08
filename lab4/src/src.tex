@@ -1,0 +1,71 @@
+\section{Метод решения}
+
+В работе используются две динамические библиотеки, содержащие разные реализации одинаковых функций. Объявления функций вынесены в общий заголовочный файл контракта:
+
+\begin{verbatim}
+extern "C" double E(int x);
+extern "C" double Area(double a, double b);
+\end{verbatim}
+
+Общий механизм:
+
+\begin{itemize}
+    \item \textbf{program1} компонуется со \texttt{libimpl\_first.dylib} на этапе сборки. 
+          Все вызовы функций обращаются к первой реализации.
+    \item \textbf{program2} загружает обе библиотеки вручную через:
+    \begin{itemize}
+        \item \texttt{dlopen(path, RTLD\_LAZY)};
+        \item \texttt{dlsym(handle, "E")};
+        \item \texttt{dlsym(handle, "Area")};
+        \item \texttt{dlclose(handle)}.
+    \end{itemize}
+    \item В зависимости от команды вызывается функция \texttt{E} или \texttt{Area} из нужной библиотеки.
+\end{itemize}
+
+\subsection{Структура проекта}
+
+\begin{verbatim}
+lab4/
+├── CMakeLists.txt
+├── include/
+│   └── contracts.h
+└── src/
+    ├── impl1.cpp
+    ├── impl2.cpp
+    ├── program1.cpp
+    └── program2.cpp
+\end{verbatim}
+
+\subsection{Реализация библиотек}
+
+Первая библиотека содержит:
+\begin{itemize}
+    \item вычисление $e$ через $(1 + 1/x)^x$;
+    \item вычисление площади треугольника как $ab/2$.
+\end{itemize}
+
+Вторая библиотека содержит:
+\begin{itemize}
+    \item вычисление $e$ через сумму $1/n!$ до заданного предела;
+    \item вычисление площади треугольника как $ab/2$ (альтернативная реализация допускается).
+\end{itemize}
+
+\subsection{Работа program1}
+
+\begin{itemize}
+    \item принимает команды \texttt{1 x}, \texttt{2 a b};
+    \item вызывает функции из первой библиотеки;
+    \item выводит результат.
+\end{itemize}
+
+\subsection{Работа program2}
+
+\begin{itemize}
+    \item вручную загружает первую и вторую библиотеки;
+    \item получает адреса функций через \texttt{dlsym};
+    \item по команде \texttt{1} вызывает функцию $E$ из \texttt{libimpl\_first};
+    \item по команде \texttt{2} вызывает $Area$ из \texttt{libimpl\_second};
+    \item завершает работу, закрывая обе библиотеки.
+\end{itemize}
+
+\pagebreak
