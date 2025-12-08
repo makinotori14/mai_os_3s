@@ -1,0 +1,53 @@
+\section{Условие}
+
+\textbf{Цель работы:}
+\begin{itemize}
+    \item изучение механизмов статической и динамической загрузки библиотек в ОС семейства Unix;
+    \item получение навыков использования системных вызовов \texttt{dlopen}, \texttt{dlsym}, \texttt{dlclose};
+    \item освоение техники разделения интерфейса (контрактов) и реализаций.
+\end{itemize}
+
+\textbf{Задание:}
+
+Вариант №31.
+
+Необходимо реализовать две функции:
+
+\begin{enumerate}
+    \item \textbf{Функция №6}: приближённое вычисление числа $e$.
+    \begin{itemize}
+        \item Первая библиотека: $E(x) = (1 + \frac{1}{x})^x$.
+        \item Вторая библиотека: $E(x) = \sum\limits_{n=0}^{x} \frac{1}{n!}$.
+    \end{itemize}
+
+    \item \textbf{Функция №7}: вычисление площади прямоугольного треугольника.
+    \[
+        Area(a, b) = \frac{a \cdot b}{2}
+    \]
+\end{enumerate}
+
+Должно быть реализовано:
+
+\begin{itemize}
+    \item файл с контрактами (\texttt{contracts.h}) c объявлением функций;
+    \item две динамические библиотеки:
+    \begin{itemize}
+        \item \texttt{libimpl\_first.dylib} — первая реализация;
+        \item \texttt{libimpl\_second.dylib} — вторая реализация;
+    \end{itemize}
+    \item две программы:
+    \begin{itemize}
+        \item \texttt{program1} — статическая линковка с первой библиотекой;
+        \item \texttt{program2} — загрузка обеих библиотек через \texttt{dlopen} и вызов нужных функций в зависимости от команды.
+    \end{itemize}
+\end{itemize}
+
+Команды:
+
+\begin{itemize}
+    \item \texttt{1 x} — вычислить $E(x)$ через библиотеку 1;
+    \item \texttt{2 a b} — вычислить $Area(a,b)$ через библиотеку 2;
+    \item \texttt{0} — переключение реализаций \textbf{не требуется}.
+\end{itemize}
+
+\pagebreak
