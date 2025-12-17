@@ -6,7 +6,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
 
-set(CMAKE_SHARED_LIBRARY_SUFFIX ".dylib")
+set(CMAKE_SHARED_LIBRARY_SUFFIX ".so")
 add_library(impl_first SHARED src/impl1.cpp)
 add_library(impl_second SHARED src/impl2.cpp)
 

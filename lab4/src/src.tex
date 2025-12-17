@@ -10,7 +10,7 @@ extern "C" double Area(double a, double b);
 Общий механизм:
 
 \begin{itemize}
-    \item \textbf{program1} компонуется со \texttt{libimpl\_first.dylib} на этапе сборки. 
+    \item \textbf{program1} компонуется со \texttt{libimpl\_first.so} на этапе сборки. 
           Все вызовы функций обращаются к первой реализации.
     \item \textbf{program2} загружает обе библиотеки вручную через:
     \begin{itemize}

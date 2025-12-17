@@ -1,5 +1,5 @@
 execve("./program1", ["./program1"], ...) = 0
-openat(..., "libimpl_first.dylib", O_RDONLY) = 3
+openat(..., "libimpl_first.so", O_RDONLY) = 3
 mmap(..., PROT_READ|PROT_EXEC, ...) = <mapping first library>
 close(3) = 0
 

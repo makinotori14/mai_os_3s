@@ -46,10 +46,10 @@ int main() {
     Library lib1{};
     Library lib2{};
 
-    if (!load_library("./libimpl_first.dylib", lib1)) {
+    if (!load_library("./libimpl_first.so", lib1)) {
         return 1;
     }
-    if (!load_library("./libimpl_second.dylib", lib2)) {
+    if (!load_library("./libimpl_second.so", lib2)) {
         dlclose(lib1.handle);
         return 1;
     }
