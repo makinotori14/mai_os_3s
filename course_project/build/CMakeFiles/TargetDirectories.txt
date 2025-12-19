@@ -1,4 +1,0 @@
-/Users/albert/workspace/mai_os_3s/course_project/build/CMakeFiles/im_server.dir
-/Users/albert/workspace/mai_os_3s/course_project/build/CMakeFiles/im_client.dir
-/Users/albert/workspace/mai_os_3s/course_project/build/CMakeFiles/edit_cache.dir
-/Users/albert/workspace/mai_os_3s/course_project/build/CMakeFiles/rebuild_cache.dir

@@ -1,0 +1,90 @@
+\section{Метод решения}
+
+\subsection{Общая архитектура}
+
+В работе реализованы два независимых процесса: \textbf{сервер} и \textbf{клиенты}.
+Взаимодействие построено через файловую систему ОС Unix: каналы FIFO создаются в каталоге \texttt{/tmp}.
+
+Используются три типа FIFO:
+
+\begin{enumerate}
+    \item \textbf{Командный FIFO сервера}:
+    \[
+        /tmp/im\_server\_cmd.fifo
+    \]
+    Все клиенты записывают в него команды (подключение, отправка сообщений, операции с группами).
+    Сервер читает этот FIFO и выполняет команды.
+
+    \item \textbf{Личный FIFO клиента}:
+    \[
+        /tmp/im\_client\_<login>.fifo
+    \]
+    Сервер записывает в этот FIFO сообщения адресату.
+    Клиент читает этот FIFO в реальном времени.
+
+    \item \textbf{FIFO группы}:
+    \[
+        /tmp/im\_group\_<group>.fifo
+    \]
+    Клиенты записывают в него сообщения группы, сервер читает и выполняет рассылку всем участникам.
+\end{enumerate}
+
+\subsection{Почему требуется серверная рассылка в группах}
+
+FIFO является потоковым каналом. Если несколько процессов читают один и тот же FIFO,
+то данные распределяются между читателями, а не дублируются.
+Поэтому для \textbf{группового чата} нельзя просто дать всем участникам читать один FIFO группы.
+Решение: \textbf{сервер читает FIFO группы и делает fan-out}, то есть копирует сообщение в личные FIFO всех участников.
+
+\subsection{Протокол обмена}
+
+Для простоты протокол текстовый, построчный: \textbf{одна команда = одна строка}, заканчивающаяся \texttt{\textbackslash n}.
+Примеры:
+
+\begin{itemize}
+    \item \texttt{CONNECT <login>}
+    \item \texttt{DISCONNECT <login>}
+    \item \texttt{SEND <from> <to> <text...>}
+    \item \texttt{CREATEGROUP <from> <group>}
+    \item \texttt{DELETEGROUP <from> <group>}
+    \item \texttt{JOINGROUP <from> <group>}
+    \item \texttt{LEAVEGROUP <from> <group>}
+\end{itemize}
+
+Сообщения в FIFO группы имеют формат:
+\begin{itemize}
+    \item \texttt{MSG <from> <text...>}
+\end{itemize}
+
+\subsection{Мультиплексирование ввода-вывода}
+
+Для обработки нескольких источников в одном процессе используется \texttt{poll()}:
+
+\begin{itemize}
+    \item в клиенте: \texttt{poll(stdin, personal\_fifo)} --- одновременно читаются команды пользователя и входящие сообщения;
+    \item в сервере: \texttt{poll(server\_cmd\_fifo, group\_fifo\_1, group\_fifo\_2, ...)} --- сервер одновременно ждёт команды от клиентов и сообщения групп.
+\end{itemize}
+
+Все FIFO открываются в неблокирующем режиме (\texttt{O\_NONBLOCK}), чтобы избежать зависаний на \texttt{open()} и \texttt{read()}.
+
+\subsection{Соответствие требуемых операций системным вызовам}
+
+\begin{itemize}
+    \item \textbf{CreateQueue} $\Rightarrow$ \texttt{mkfifo(path, 0666)}
+    \item \textbf{DeleteQueue} $\Rightarrow$ \texttt{unlink(path)}
+    \item \textbf{ConnectToQueue} $\Rightarrow$ \texttt{open(path, flags)}
+    \item \textbf{Push (Send)} $\Rightarrow$ \texttt{write(fd, buf, size)} (с дозаписью до конца)
+    \item \textbf{Pop (Receive)} $\Rightarrow$ \texttt{read(fd, buf, size)} + разбор строк по \texttt{\textbackslash n}
+    \item \textbf{Top} реализуется логически через буфер \texttt{readBuf}: данные читаются в память и выдаются построчно.
+\end{itemize}
+
+\subsection{Особенности работы с FIFO}
+
+\begin{itemize}
+    \item \texttt{open(FIFO, O\_WRONLY)} может блокироваться, если нет читателя. Поэтому применяется \texttt{O\_NONBLOCK}.
+    \item Для предотвращения ситуации постоянного EOF используется \textbf{фиктивный writer} (dummy write fd):
+    сервер открывает \texttt{O\_WRONLY | O\_NONBLOCK} на тот же FIFO, который читает.
+    \item Сервер игнорирует \texttt{SIGPIPE}, чтобы не завершаться при записи в закрытый FIFO клиента.
+\end{itemize}
+
+\pagebreak

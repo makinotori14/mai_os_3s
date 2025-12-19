@@ -1,0 +1,77 @@
+\section{Результаты}
+
+В ходе выполнения курсовой работы реализован прототип клиент--серверной системы обмена сообщениями на C++ с использованием FIFO (именованных каналов) в ОС Unix.
+
+\subsection{Реализованный функционал}
+
+Система поддерживает:
+
+\begin{itemize}
+    \item подключение клиента к серверу по логину (\texttt{CONNECT});
+    \item отправку личных сообщений между клиентами (\texttt{SEND});
+    \item получение сообщений в режиме реального времени (клиент опрашивает \texttt{stdin} и личный FIFO через \texttt{poll});
+    \item создание/удаление групп (\texttt{CREATEGROUP}/\texttt{DELETEGROUP});
+    \item вступление/выход из группы (\texttt{JOINGROUP}/\texttt{LEAVEGROUP});
+    \item групповые сообщения: клиент пишет в FIFO группы, сервер читает и рассылает всем участникам.
+\end{itemize}
+
+\subsection{Проверка работы (типовые сценарии)}
+
+\textbf{Сценарий 1: личное сообщение}
+
+\begin{enumerate}
+    \item Запускается сервер, создаётся \texttt{/tmp/im\_server\_cmd.fifo}.
+    \item Запускаются клиенты \texttt{alice} и \texttt{bob}. Каждый создаёт свой FIFO:
+          \texttt{/tmp/im\_client\_alice.fifo} и \texttt{/tmp/im\_client\_bob.fifo}.
+    \item Клиент \texttt{alice} отправляет: \texttt{/msg bob Привет}.
+    \item Сервер получает команду \texttt{SEND alice bob ...} и записывает сообщение в FIFO клиента \texttt{bob}.
+    \item Клиент \texttt{bob} получает строку и выводит её на экран.
+\end{enumerate}
+
+\textbf{Сценарий 2: групповой чат}
+
+\begin{enumerate}
+    \item Клиент \texttt{alice} создаёт группу: \texttt{/create\_group team}.
+    \item Клиент \texttt{bob} вступает: \texttt{/join team}.
+    \item Клиент \texttt{alice} отправляет в группу: \texttt{/g team Hello}.
+          При этом запись происходит в FIFO группы \texttt{/tmp/im\_group\_team.fifo}.
+    \item Сервер читает FIFO группы и рассылает сообщение всем участникам через их личные FIFO.
+\end{enumerate}
+
+\subsection{Фрагменты логов}
+
+\textbf{Лог сервера} (пример):
+\begin{verbatim}
+[2025-12-20 12:00:01] Server start...
+[2025-12-20 12:00:05] CONNECT alice
+[2025-12-20 12:00:07] CONNECT bob
+[2025-12-20 12:00:10] SEND alice->bob 'Привет'
+[2025-12-20 12:00:20] CREATEGROUP team by alice
+[2025-12-20 12:00:22] JOINGROUP bob -> team
+[2025-12-20 12:00:25] GROUPMSG [team] alice: Hello
+\end{verbatim}
+
+\textbf{Лог клиента bob} (пример):
+\begin{verbatim}
+Connected as 'bob'. Type /help
+[pm] alice: Привет
+[group:team] alice: Hello
+\end{verbatim}
+
+\subsection{Использованные системные вызовы}
+
+В реализации активно применяются системные вызовы:
+\texttt{mkfifo}, \texttt{unlink}, \texttt{open}, \texttt{read}, \texttt{write}, \texttt{close}, \texttt{poll}, \texttt{signal}.
+Описание и причины использования приведены в разделе \enquote{Метод решения}.
+
+\subsection{Исходный код}
+
+\begin{center}
+\lstinputlisting[language=C++,caption=im\_server.cpp,captionpos=b]{code/im_server.cpp}
+\end{center}
+
+\begin{center}
+\lstinputlisting[language=C++,caption=im\_client.cpp,captionpos=b]{code/im_client.cpp}
+\end{center}
+
+\pagebreak

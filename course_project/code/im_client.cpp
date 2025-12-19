@@ -1,10 +1,3 @@
-// im_client_student.cpp
-// Клиент чата на FIFO.
-// 1) Создаёт свой FIFO: /tmp/im_client_<login>.fifo
-// 2) Открывает его на чтение (получает сообщения)
-// 3) Открывает FIFO сервера на запись (команды)
-// 4) poll(stdin + личный FIFO) => "в реальном времени"
-
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/poll.h>
@@ -23,7 +16,6 @@ static const char* SERVER_CMD_FIFO = "/tmp/im_server_cmd.fifo";
 static volatile sig_atomic_t g_stop = 0;
 static void on_sigint(int) { g_stop = 1; }
 
-// CreateQueue
 static bool CreateQueue(const std::string& path) {
     if (mkfifo(path.c_str(), 0666) == 0) return true;
     if (errno == EEXIST) return true;
@@ -31,7 +23,6 @@ static bool CreateQueue(const std::string& path) {
     return false;
 }
 
-// DeleteQueue
 static bool DeleteQueue(const std::string& path) {
     if (unlink(path.c_str()) == 0) return true;
     if (errno == ENOENT) return true;
@@ -39,14 +30,12 @@ static bool DeleteQueue(const std::string& path) {
     return false;
 }
 
-// ConnectToQueue
 static int ConnectToQueue(const std::string& path, int flags) {
     int fd = open(path.c_str(), flags);
     if (fd < 0) std::perror(("open(" + path + ")").c_str());
     return fd;
 }
 
-// Push
 static bool Push(int fd, const std::string& s) {
     const char* p = s.c_str();
     size_t left = s.size();
@@ -84,7 +73,6 @@ int main(int argc, char** argv) {
     signal(SIGINT, on_sigint);
     signal(SIGTERM, on_sigint);
 
-    // ---- 1) логин ----
     std::string login = (argc >= 2) ? argv[1] : "";
     if (login.empty()) {
         std::cout << "Enter login: ";
@@ -95,20 +83,17 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    // ---- 2) создаём личный FIFO ----
     std::string myFifo = ClientFifoPath(login);
-    DeleteQueue(myFifo);          // на случай старого
+    DeleteQueue(myFifo);          
+
     if (!CreateQueue(myFifo)) return 1;
 
-    // ---- 3) открываем личный FIFO на чтение ----
     int fdIn = ConnectToQueue(myFifo, O_RDONLY | O_NONBLOCK);
     if (fdIn < 0) return 1;
 
-    // dummy writer, чтобы не ловить EOF пока сервер не подключился
     int fdDummyW = open(myFifo.c_str(), O_WRONLY | O_NONBLOCK);
     if (fdDummyW < 0) fdDummyW = -1;
 
-    // ---- 4) подключаемся к серверу (cmd fifo на запись) ----
     int fdCmd = open(SERVER_CMD_FIFO, O_WRONLY | O_NONBLOCK);
     if (fdCmd < 0) {
         std::cerr << "Server not running?\n";
@@ -119,19 +104,19 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    // CONNECT
     Push(fdCmd, "CONNECT " + login + "\n");
 
     std::cout << "Connected as '" << login << "'. Type /help\n";
 
-    std::string readBuf; // буфер для входящих данных
+    std::string readBuf; 
 
-    // ---- 5) главный цикл: poll(stdin + fifo) ----
     while (!g_stop) {
         pollfd fds[2]{};
-        fds[0].fd = 0;        // stdin
+        fds[0].fd = 0;        
+
         fds[0].events = POLLIN;
-        fds[1].fd = fdIn;     // личный FIFO
+        fds[1].fd = fdIn;     
+
         fds[1].events = POLLIN;
 
         int rc = poll(fds, 2, 250);
@@ -141,7 +126,6 @@ int main(int argc, char** argv) {
             break;
         }
 
-        // ---- Pop/Receive: читаем входящие сообщения ----
         if (fds[1].revents & POLLIN) {
             char buf[4096];
             while (true) {
@@ -149,7 +133,6 @@ int main(int argc, char** argv) {
                 if (n > 0) {
                     readBuf.append(buf, buf + n);
 
-                    // печатаем построчно
                     while (true) {
                         size_t pos = readBuf.find('\n');
                         if (pos == std::string::npos) break;
@@ -168,7 +151,6 @@ int main(int argc, char** argv) {
             }
         }
 
-        // ---- stdin: команды пользователя ----
         if (fds[0].revents & POLLIN) {
             std::string line;
             if (!std::getline(std::cin, line)) { g_stop = 1; break; }
@@ -177,7 +159,6 @@ int main(int argc, char** argv) {
             if (line == "/help") { PrintHelp(); continue; }
             if (line == "/quit") { Push(fdCmd, "DISCONNECT " + login + "\n"); break; }
 
-            // /msg <to> <text>
             if (line.rfind("/msg ", 0) == 0) {
                 std::istringstream iss(line);
                 std::string cmd, to;
@@ -194,7 +175,6 @@ int main(int argc, char** argv) {
                 continue;
             }
 
-            // /create_group <name>
             if (line.rfind("/create_group ", 0) == 0) {
                 std::istringstream iss(line);
                 std::string cmd, g;
@@ -204,7 +184,6 @@ int main(int argc, char** argv) {
                 continue;
             }
 
-            // /delete_group <name>
             if (line.rfind("/delete_group ", 0) == 0) {
                 std::istringstream iss(line);
                 std::string cmd, g;
@@ -214,7 +193,6 @@ int main(int argc, char** argv) {
                 continue;
             }
 
-            // /join <name>
             if (line.rfind("/join ", 0) == 0) {
                 std::istringstream iss(line);
                 std::string cmd, g;
@@ -224,7 +202,6 @@ int main(int argc, char** argv) {
                 continue;
             }
 
-            // /leave <name>
             if (line.rfind("/leave ", 0) == 0) {
                 std::istringstream iss(line);
                 std::string cmd, g;
@@ -234,7 +211,6 @@ int main(int argc, char** argv) {
                 continue;
             }
 
-            // /g <group> <text> : пишем напрямую в FIFO группы
             if (line.rfind("/g ", 0) == 0) {
                 std::istringstream iss(line);
                 std::string cmd, g;
@@ -265,7 +241,6 @@ int main(int argc, char** argv) {
         }
     }
 
-    // ---- cleanup ----
     Push(fdCmd, "DISCONNECT " + login + "\n");
     close(fdCmd);
     close(fdIn);
@@ -275,3 +250,4 @@ int main(int argc, char** argv) {
     std::cout << "Bye\n";
     return 0;
 }
+

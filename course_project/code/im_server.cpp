@@ -1,13 +1,3 @@
-// im_server_student.cpp
-// Простой сервер чата на FIFO (именованные pipe'ы).
-// Идея:
-// 1) Есть один общий FIFO команд сервера: /tmp/im_server_cmd.fifo
-//    Все клиенты пишут туда команды: CONNECT, SEND, CREATEGROUP, JOINGROUP, ...
-// 2) У каждого клиента есть личный FIFO: /tmp/im_client_<login>.fifo
-//    Сервер пишет туда сообщения.
-// 3) У каждой группы есть FIFO: /tmp/im_group_<group>.fifo
-//    Клиенты пишут туда сообщения группы, сервер читает и рассылает всем участникам.
-
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/poll.h>
@@ -25,14 +15,11 @@
 #include <iostream>
 #include <sstream>
 
-// -------------------- Константы путей --------------------
 static const char* SERVER_CMD_FIFO = "/tmp/im_server_cmd.fifo";
 
-// -------------------- Глобальный флаг остановки --------------------
 static volatile sig_atomic_t g_stop = 0;
 static void on_sigint(int) { g_stop = 1; }
 
-// -------------------- Вспомогательные функции логирования --------------------
 static void Log(const std::string& msg) {
     std::time_t t = std::time(nullptr);
     char timebuf[64];
@@ -40,13 +27,10 @@ static void Log(const std::string& msg) {
     std::cerr << "[" << timebuf << "] " << msg << "\n";
 }
 
-// -------------------- CreateQueue / DeleteQueue --------------------
 static bool CreateQueue(const std::string& path) {
-    // mkfifo создаёт FIFO-файл.
-    // 0666 => rw-rw-rw- (но umask может урезать)
+
     if (mkfifo(path.c_str(), 0666) == 0) return true;
 
-    // Если уже существует — это не страшно
     if (errno == EEXIST) return true;
 
     std::perror(("mkfifo(" + path + ")").c_str());
@@ -54,16 +38,16 @@ static bool CreateQueue(const std::string& path) {
 }
 
 static bool DeleteQueue(const std::string& path) {
-    // unlink удаляет файл FIFO
+
     if (unlink(path.c_str()) == 0) return true;
-    if (errno == ENOENT) return true; // уже нет
+    if (errno == ENOENT) return true; 
+
     std::perror(("unlink(" + path + ")").c_str());
     return false;
 }
 
-// -------------------- Push (write) --------------------
 static bool Push(int fd, const std::string& s) {
-    // Пишем полностью всю строку (write может записать не всё за раз)
+
     const char* p = s.c_str();
     size_t left = s.size();
 
@@ -80,7 +64,6 @@ static bool Push(int fd, const std::string& s) {
     return true;
 }
 
-// -------------------- Пути FIFO клиента/группы --------------------
 static std::string ClientFifoPath(const std::string& login) {
     return "/tmp/im_client_" + login + ".fifo";
 }
@@ -88,25 +71,30 @@ static std::string GroupFifoPath(const std::string& group) {
     return "/tmp/im_group_" + group + ".fifo";
 }
 
-// -------------------- Простые "студенческие" структуры --------------------
-// Вместо unordered_map/unordered_set — обычные vector и поиск в них.
-
 struct Client {
-    std::string login;       // логин клиента
-    std::string fifoPath;    // путь к личному FIFO
-    int fdWrite;             // fd для записи в FIFO клиента (сервер->клиент)
+    std::string login;       
+
+    std::string fifoPath;    
+
+    int fdWrite;             
+
 };
 
 struct Group {
-    std::string name;              // имя группы
-    std::string fifoPath;          // путь к FIFO группы
-    int fdRead;                    // сервер читает этот FIFO
-    int fdDummyWrite;              // фиктивный writer (чтобы не ловить EOF)
-    std::vector<std::string> members; // логины участников
-    std::string readBuf;           // буфер для "кусочных" read()
+    std::string name;              
+
+    std::string fifoPath;          
+
+    int fdRead;                    
+
+    int fdDummyWrite;              
+
+    std::vector<std::string> members; 
+
+    std::string readBuf;           
+
 };
 
-// -------------------- Поиск клиента/группы --------------------
 static int FindClientIndex(const std::vector<Client>& clients, const std::string& login) {
     for (int i = 0; i < (int)clients.size(); ++i) {
         if (clients[i].login == login) return i;
@@ -128,37 +116,32 @@ static bool IsMember(const Group& g, const std::string& login) {
     return false;
 }
 
-// -------------------- Отправка сообщения клиенту --------------------
 static void SendToClient(std::vector<Client>& clients,
                          const std::string& login,
                          std::string msgLine)
 {
     int idx = FindClientIndex(clients, login);
-    if (idx < 0) return; // нет такого клиента
+    if (idx < 0) return; 
 
-    // гарантируем \n
     if (msgLine.empty() || msgLine.back() != '\n') msgLine.push_back('\n');
 
     Client& c = clients[idx];
 
-    // если fdWrite не открыт — пробуем открыть
     if (c.fdWrite < 0) {
         c.fdWrite = open(c.fifoPath.c_str(), O_WRONLY | O_NONBLOCK);
         if (c.fdWrite < 0) {
-            // Клиент, вероятно, ещё не открыл read-end
+
             return;
         }
     }
 
-    // Пишем
     if (!Push(c.fdWrite, msgLine)) {
-        // если сломалось — закрываем и забудем (в следующий раз попробуем заново)
+
         close(c.fdWrite);
         c.fdWrite = -1;
     }
 }
 
-// -------------------- Рассылка в группу --------------------
 static void BroadcastToGroup(std::vector<Client>& clients,
                              const Group& g,
                              const std::string& from,
@@ -170,7 +153,6 @@ static void BroadcastToGroup(std::vector<Client>& clients,
     }
 }
 
-// -------------------- Удаление клиента из всех групп --------------------
 static void RemoveClientFromAllGroups(std::vector<Group>& groups, const std::string& login) {
     for (auto& g : groups) {
         std::vector<std::string> newList;
@@ -181,12 +163,11 @@ static void RemoveClientFromAllGroups(std::vector<Group>& groups, const std::str
     }
 }
 
-// -------------------- Обработка команд из командного FIFO --------------------
 static void HandleCommand(const std::string& rawLine,
                           std::vector<Client>& clients,
                           std::vector<Group>& groups)
 {
-    // Убираем \r\n
+
     std::string line = rawLine;
     while (!line.empty() && (line.back() == '\n' || line.back() == '\r'))
         line.pop_back();
@@ -196,12 +177,10 @@ static void HandleCommand(const std::string& rawLine,
     std::string cmd;
     iss >> cmd;
 
-    // -------- CONNECT <login> --------
     if (cmd == "CONNECT") {
         std::string login; iss >> login;
         if (login.empty()) return;
 
-        // если уже есть — просто сообщим
         if (FindClientIndex(clients, login) >= 0) {
             SendToClient(clients, login, "SERVER: already connected");
             return;
@@ -212,7 +191,6 @@ static void HandleCommand(const std::string& rawLine,
         c.fifoPath = ClientFifoPath(login);
         c.fdWrite = -1;
 
-        // сервер может создать FIFO клиента (если клиента не успел)
         CreateQueue(c.fifoPath);
 
         clients.push_back(c);
@@ -222,7 +200,6 @@ static void HandleCommand(const std::string& rawLine,
         return;
     }
 
-    // -------- DISCONNECT <login> --------
     if (cmd == "DISCONNECT") {
         std::string login; iss >> login;
         if (login.empty()) return;
@@ -232,7 +209,6 @@ static void HandleCommand(const std::string& rawLine,
             Log("DISCONNECT " + login);
             if (clients[idx].fdWrite >= 0) close(clients[idx].fdWrite);
 
-            // удаляем из vector (простой способ: swap с последним и pop_back)
             clients[idx] = clients.back();
             clients.pop_back();
         }
@@ -241,7 +217,6 @@ static void HandleCommand(const std::string& rawLine,
         return;
     }
 
-    // -------- SEND <from> <to> <text...> --------
     if (cmd == "SEND") {
         std::string from, to;
         iss >> from >> to;
@@ -263,7 +238,6 @@ static void HandleCommand(const std::string& rawLine,
         return;
     }
 
-    // -------- CREATEGROUP <from> <group> --------
     if (cmd == "CREATEGROUP") {
         std::string from, group;
         iss >> from >> group;
@@ -280,13 +254,11 @@ static void HandleCommand(const std::string& rawLine,
         g.fdRead = -1;
         g.fdDummyWrite = -1;
 
-        // создаём FIFO группы
         if (!CreateQueue(g.fifoPath)) {
             SendToClient(clients, from, "SERVER: cannot create group fifo");
             return;
         }
 
-        // сервер открывает FIFO группы на чтение
         g.fdRead = open(g.fifoPath.c_str(), O_RDONLY | O_NONBLOCK);
         if (g.fdRead < 0) {
             std::perror(("open(" + g.fifoPath + ")").c_str());
@@ -295,11 +267,9 @@ static void HandleCommand(const std::string& rawLine,
             return;
         }
 
-        // dummy writer, чтобы не ловить EOF
         g.fdDummyWrite = open(g.fifoPath.c_str(), O_WRONLY | O_NONBLOCK);
         if (g.fdDummyWrite < 0) g.fdDummyWrite = -1;
 
-        // создатель сразу участник
         g.members.push_back(from);
 
         groups.push_back(g);
@@ -309,7 +279,6 @@ static void HandleCommand(const std::string& rawLine,
         return;
     }
 
-    // -------- DELETEGROUP <from> <group> --------
     if (cmd == "DELETEGROUP") {
         std::string from, group;
         iss >> from >> group;
@@ -334,7 +303,6 @@ static void HandleCommand(const std::string& rawLine,
         return;
     }
 
-    // -------- JOINGROUP <from> <group> --------
     if (cmd == "JOINGROUP") {
         std::string from, group;
         iss >> from >> group;
@@ -355,7 +323,6 @@ static void HandleCommand(const std::string& rawLine,
         return;
     }
 
-    // -------- LEAVEGROUP <from> <group> --------
     if (cmd == "LEAVEGROUP") {
         std::string from, group;
         iss >> from >> group;
@@ -367,7 +334,6 @@ static void HandleCommand(const std::string& rawLine,
             return;
         }
 
-        // удаляем из members
         std::vector<std::string> newList;
         for (auto& m : groups[gi].members) {
             if (m != from) newList.push_back(m);
@@ -379,11 +345,9 @@ static void HandleCommand(const std::string& rawLine,
         return;
     }
 
-    // неизвестная команда
     Log("UNKNOWN CMD: " + cmd);
 }
 
-// -------------------- Чтение сообщений из FIFO группы --------------------
 static void HandleGroupReadable(Group& g, std::vector<Client>& clients) {
     char buf[4096];
 
@@ -392,7 +356,6 @@ static void HandleGroupReadable(Group& g, std::vector<Client>& clients) {
         if (n > 0) {
             g.readBuf.append(buf, buf + n);
 
-            // режем по строкам
             while (true) {
                 size_t pos = g.readBuf.find('\n');
                 if (pos == std::string::npos) break;
@@ -402,7 +365,6 @@ static void HandleGroupReadable(Group& g, std::vector<Client>& clients) {
 
                 if (oneLine.empty()) continue;
 
-                // ожидаем формат: MSG <from> <text...>
                 std::istringstream iss(oneLine);
                 std::string tag, from;
                 iss >> tag >> from;
@@ -418,7 +380,8 @@ static void HandleGroupReadable(Group& g, std::vector<Client>& clients) {
             continue;
         }
 
-        if (n == 0) break; // EOF (обычно при отсутствии writers, если нет dummy_w)
+        if (n == 0) break; 
+
         if (errno == EAGAIN || errno == EWOULDBLOCK) break;
         if (errno == EINTR) continue;
 
@@ -427,40 +390,35 @@ static void HandleGroupReadable(Group& g, std::vector<Client>& clients) {
     }
 }
 
-// -------------------- main --------------------
 int main() {
-    // Игнорируем SIGPIPE, чтобы сервер не падал если write в закрытый FIFO клиента
+
     signal(SIGPIPE, SIG_IGN);
     signal(SIGINT, on_sigint);
     signal(SIGTERM, on_sigint);
 
     Log("Server start...");
 
-    // 1) CreateQueue для командного FIFO
     if (!CreateQueue(SERVER_CMD_FIFO)) return 1;
 
-    // 2) открываем FIFO команд на чтение
     int fd_cmd_r = open(SERVER_CMD_FIFO, O_RDONLY | O_NONBLOCK);
     if (fd_cmd_r < 0) {
         std::perror("open(cmd_r)");
         return 1;
     }
 
-    // 3) dummy writer, чтобы не ловить EOF
     int fd_cmd_dummy_w = open(SERVER_CMD_FIFO, O_WRONLY | O_NONBLOCK);
     if (fd_cmd_dummy_w < 0) fd_cmd_dummy_w = -1;
 
     std::vector<Client> clients;
     std::vector<Group> groups;
 
-    std::string cmdBuf; // буфер для командного FIFO
+    std::string cmdBuf; 
 
     while (!g_stop) {
-        // pollfd: первый — cmd FIFO, остальные — group FIFO
+
         std::vector<pollfd> fds;
         fds.push_back(pollfd{fd_cmd_r, POLLIN, 0});
 
-        // Чтобы знать, какой pollfd соответствует какой группе:
         std::vector<int> groupIndexForPoll;
         for (int i = 0; i < (int)groups.size(); ++i) {
             if (groups[i].fdRead < 0) continue;
@@ -476,7 +434,6 @@ int main() {
         }
         if (rc == 0) continue;
 
-        // 1) читаем команды
         if (fds[0].revents & POLLIN) {
             char buf[4096];
             while (true) {
@@ -484,7 +441,6 @@ int main() {
                 if (n > 0) {
                     cmdBuf.append(buf, buf + n);
 
-                    // выделяем строки команд
                     while (true) {
                         size_t pos = cmdBuf.find('\n');
                         if (pos == std::string::npos) break;
@@ -502,7 +458,6 @@ int main() {
             }
         }
 
-        // 2) читаем сообщения групп
         for (size_t p = 1; p < fds.size(); ++p) {
             if (!(fds[p].revents & POLLIN)) continue;
             int gi = groupIndexForPoll[p - 1];
@@ -514,7 +469,6 @@ int main() {
 
     Log("Server stop... cleaning");
 
-    // cleanup
     for (auto& c : clients) {
         if (c.fdWrite >= 0) close(c.fdWrite);
     }
@@ -529,3 +483,4 @@ int main() {
     DeleteQueue(SERVER_CMD_FIFO);
     return 0;
 }
+
